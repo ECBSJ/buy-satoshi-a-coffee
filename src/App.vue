@@ -5,6 +5,20 @@ import { CircleHelp } from "lucide-vue-next";
 const tooltip = ref(
   "It's a friendly metaphor, not a real coffee. This acts as your personal tribute to Satoshi Nakamoto."
 );
+
+const name = ref("");
+const message = ref("");
+const amount = ref(1);
+const isConnected = ref(false);
+
+const selectAmount = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  amount.value = parseInt(target.id);
+};
+
+const handleSubmit = () => {
+  console.log(name.value, message.value, amount.value);
+};
 </script>
 
 <template>
@@ -16,24 +30,49 @@ const tooltip = ref(
       <div class="selection">
         <span class="coffee-icon">☕️</span>
         <span class="x">x</span>
-        <span class="quantity-selector">1</span>
-        <span class="quantity-selector">2</span>
-        <span class="quantity-selector">3</span>
-        <span class="quantity-selector-total">qt</span>
+        <span
+          class="quantity-selector"
+          :class="{ selected: amount === 1 }"
+          id="1"
+          @click="selectAmount"
+          >1</span
+        >
+        <span
+          class="quantity-selector"
+          :class="{ selected: amount === 2 }"
+          id="2"
+          @click="selectAmount"
+          >2</span
+        >
+        <span
+          class="quantity-selector"
+          :class="{ selected: amount === 3 }"
+          id="3"
+          @click="selectAmount"
+          >3</span
+        >
+        <span class="quantity-selector-total">{{ amount }}</span>
       </div>
-      <input type="text" placeholder="Name / BNS / X handle" />
-      <textarea type="text" placeholder="Write a tribute message..."></textarea>
+      <input type="text" placeholder="Name / BNS / X handle" v-model="name" />
+      <textarea type="text" placeholder="Write a tribute message..." v-model="message"></textarea>
       <small
         >This message, along with your name, will be inserted into the <code>memo</code> field of
         the transaction. Fees will vary depending on <code>memo</code> length.</small
       >
-      <button>Make Your $25 Tribute</button>
+      <button @click="handleSubmit" :disabled="!isConnected">
+        Make Your {{ amount }} sBTC sat tribute
+      </button>
       <small>Secured by Stacks</small>
     </section>
   </main>
 </template>
 
 <style scoped>
+.selected {
+  background-color: rgb(244, 200, 118);
+  color: white;
+}
+
 .x {
   font-size: 1.5rem;
   font-weight: bold;
@@ -50,6 +89,13 @@ button {
   cursor: pointer;
 }
 
+button[disabled] {
+  background-color: rgb(255, 231, 187);
+  border: 1px solid rgb(255, 231, 187);
+  color: rgb(133, 133, 133);
+  cursor: not-allowed;
+}
+
 .coffee-icon {
   font-size: 3rem;
 }
@@ -63,7 +109,6 @@ button {
   color: sienna;
   width: 46px;
   height: 46px;
-  background-color: white;
   border: 1px solid rgb(255, 231, 187);
   border-radius: 25px;
   cursor: pointer;
