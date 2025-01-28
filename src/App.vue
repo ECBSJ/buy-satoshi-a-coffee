@@ -85,9 +85,9 @@ onBeforeMount(() => {
 
   getCoffeeEvents();
 
-  // setInterval(() => {
-  //   getCoffeeEvents();
-  // }, 5000);
+  setInterval(() => {
+    getCoffeeEvents();
+  }, 5000);
 });
 
 const client = createClient({
