@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onBeforeMount } from "vue";
 import { CircleHelp } from "lucide-vue-next";
+import { showConnect, UserSession, openContractCall } from "@stacks/connect";
+import { Cl, Pc, PostConditionMode } from "@stacks/transactions";
+import logo from "./assets/logo.svg";
+import Tributes from "./components/Tributes.vue";
+import { createClient } from "@stacks/blockchain-api-client";
+import { Buffer } from "buffer";
+import type { TransactionEventSmartContractLog } from "./utils/types";
+
+let userSession = new UserSession();
 
 const tooltip = ref(
   "It's a friendly metaphor, not a real coffee. This acts as your personal tribute to Satoshi Nakamoto."
@@ -18,14 +27,126 @@ const selectAmount = (e: MouseEvent) => {
 
 const handleSubmit = () => {
   console.log(name.value, message.value, amount.value);
+
+  let pc = Pc.principal(userSession.loadUserData().profile.stxAddress.mainnet)
+    .willSendEq(amount.value)
+    .ft("SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", "sbtc-token");
+
+  openContractCall({
+    contractAddress: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4",
+    contractName: "sbtc-token",
+    functionName: "transfer",
+    functionArgs: [
+      Cl.uint(amount.value),
+      Cl.standardPrincipal(userSession.loadUserData().profile.stxAddress.mainnet),
+      Cl.standardPrincipal("SP1HEJ1XHBJZJFNA2AECYQXQGZD8EQE4F30D6H5CR"),
+      Cl.some(Cl.bufferFromUtf8(`${name.value}☕️${message.value}`)),
+    ],
+    postConditions: [pc],
+    postConditionMode: PostConditionMode.Deny,
+    network: "mainnet",
+    appDetails: {
+      name: "Tribute to Satoshi",
+      icon: window.location.origin + "/favicon.ico",
+    },
+    userSession: userSession,
+    onFinish: (data) => {
+      console.log(data);
+    },
+    onCancel: () => {
+      console.log("Transaction cancelled");
+    },
+  });
+};
+
+const handleConnect = async () => {
+  await showConnect({
+    appDetails: {
+      name: "Tribute to Satoshi",
+      icon: logo,
+    },
+    onFinish: () => {
+      isConnected.value = true;
+      console.log(userSession.loadUserData().profile);
+    },
+  });
+};
+
+const handleDisconnect = () => {
+  userSession.signUserOut();
+  isConnected.value = false;
+};
+
+onBeforeMount(() => {
+  if (userSession.isUserSignedIn()) {
+    isConnected.value = true;
+    console.log(userSession.loadUserData().profile);
+  }
+
+  getCoffeeEvents();
+
+  // setInterval(() => {
+  //   getCoffeeEvents();
+  // }, 5000);
+});
+
+const client = createClient({
+  baseUrl: "https://api.mainnet.hiro.so",
+});
+
+let results = ref<TransactionEventSmartContractLog[]>([]);
+
+const getCoffeeEvents = async () => {
+  const { data } = await client.GET("/extended/v1/contract/{contract_id}/events", {
+    params: {
+      path: { contract_id: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token" },
+    },
+    headers: {
+      "x-api-key": import.meta.env.VITE_PUBLIC_HIRO_API_KEY!,
+    },
+  });
+
+  let events = data?.results as TransactionEventSmartContractLog[];
+
+  let coffees = events.filter((e) => {
+    return e.contract_log.value.repr.includes("e29895efb88f");
+  });
+
+  let adjustedCoffees = coffees.map((c) => {
+    let split = c.contract_log.value.repr.slice(2).split("e29895efb88f");
+
+    let name = Buffer.from(split[0], "hex").toString("utf8");
+    let message = Buffer.from(split[1], "hex").toString("utf8");
+    let combined = `${name}☕️${message}`;
+
+    return {
+      ...c,
+      contract_log: {
+        ...c.contract_log,
+        value: {
+          hex: c.contract_log.value.hex,
+          repr: combined,
+        },
+      },
+    };
+  });
+
+  console.log(adjustedCoffees);
+
+  results.value = adjustedCoffees;
 };
 </script>
 
 <template>
+  <button class="connect-button" v-on:click="handleDisconnect" v-if="isConnected">
+    Disconnect
+  </button>
+  <button class="connect-button" type="button" v-on:click="handleConnect" v-else>Connect</button>
   <main>
     <section class="tribute-card">
       <p class="heading">
-        Buy Satoshi a coffee <span v-bind:title="tooltip"><CircleHelp /></span>
+        Buy Satoshi coffee with <img src="/sbtc-round.png" width="35px" alt="sbtc-round-logo" />
+        <span class="tooltip-logo" v-bind:title="tooltip"><CircleHelp /></span>
       </p>
       <div class="selection">
         <span class="coffee-icon">☕️</span>
@@ -34,21 +155,21 @@ const handleSubmit = () => {
           class="quantity-selector"
           :class="{ selected: amount === 1 }"
           id="1"
-          @click="selectAmount"
+          v-on:click="selectAmount"
           >1</span
         >
         <span
           class="quantity-selector"
           :class="{ selected: amount === 2 }"
           id="2"
-          @click="selectAmount"
+          v-on:click="selectAmount"
           >2</span
         >
         <span
           class="quantity-selector"
           :class="{ selected: amount === 3 }"
           id="3"
-          @click="selectAmount"
+          v-on:click="selectAmount"
           >3</span
         >
         <span class="quantity-selector-total">{{ amount }}</span>
@@ -59,15 +180,29 @@ const handleSubmit = () => {
         >This message, along with your name, will be inserted into the <code>memo</code> field of
         the transaction. Fees will vary depending on <code>memo</code> length.</small
       >
-      <button @click="handleSubmit" :disabled="!isConnected">
+      <button v-on:click="handleSubmit" :disabled="!isConnected">
         Make Your {{ amount }} sBTC sat tribute
       </button>
       <small>Secured by Stacks</small>
     </section>
+
+    <Tributes :coffees="results" />
   </main>
 </template>
 
 <style scoped>
+.tooltip-logo {
+  display: flex;
+}
+
+.connect-button {
+  position: absolute;
+  right: 0;
+  padding: 10px 17px;
+  border-radius: 7px;
+  font-size: 1rem;
+}
+
 .selected {
   background-color: rgb(244, 200, 118);
   color: white;
@@ -192,13 +327,13 @@ main {
   align-items: center;
   justify-content: center;
   row-gap: 30px;
+  margin-top: 200px;
 }
 
 section {
   width: 500px;
   display: flex;
   flex-direction: column;
-  align-items: left;
   justify-content: center;
   row-gap: 20px;
   border: 3px solid orange;
